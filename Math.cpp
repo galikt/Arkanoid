@@ -5,7 +5,12 @@ Vector2d::Vector2d(float x, float y) :
 {
 }
 
-uint32_t ColorTo(uint32_t r, uint32_t g, uint32_t b)
+Color4c::Color4c(uint32_t r, uint32_t g, uint32_t b)
+{
+	rgba = ColorToInt(r, g, b);
+}
+
+uint32_t Color4c::ColorToInt(uint32_t r, uint32_t g, uint32_t b)
 {
 	uint32_t result = b;
 	result |= g << 8;

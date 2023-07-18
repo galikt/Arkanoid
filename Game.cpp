@@ -22,7 +22,7 @@ static Arcanoid Game;
 // initialize game data in this function
 void initialize()
 {
-    Game.Initialize(1, 1);
+    Game.Initialize(1, 150);
 }
 
 // this function is called to update game data,
@@ -66,7 +66,6 @@ void draw()
   // clear backbuffer
   memset(buffer, 0, SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(uint32_t));
   Game.Draw(*buffer, SCREEN_WIDTH, SCREEN_HEIGHT);
-
 }
 
 // free game data in this function
