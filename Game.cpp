@@ -1,6 +1,8 @@
 #include "Engine.h"
 #include <stdlib.h>
-#include <memory.h>
+#include <list>
+#include "Arcanoid.h"
+//#include "Input.h"
 
 //
 //  You are free to modify this file
@@ -15,18 +17,46 @@
 //  is_window_active() - returns true if window is active
 //  schedule_quit_game() - quit game after act()
 
+static Arcanoid Game;
 
 // initialize game data in this function
 void initialize()
 {
+    Game.Initialize(1, 1);
 }
 
 // this function is called to update game data,
 // dt - time elapsed since the previous update (in seconds)
 void act(float dt)
 {
+  static std::list<InputKey> key_list;
+
   if (is_key_pressed(VK_ESCAPE))
+  {
+    key_list.push_back(InputKey::ESCAPE);
     schedule_quit_game();
+  }
+
+  if (is_key_pressed(VK_SPACE))
+      key_list.push_back(InputKey::SPACE);
+
+  if (is_key_pressed(VK_LEFT))
+      key_list.push_back(InputKey::LEFT);
+
+  if (is_key_pressed(VK_UP))
+      key_list.push_back(InputKey::UP);
+
+  if (is_key_pressed(VK_RIGHT))
+      key_list.push_back(InputKey::RIGHT);
+
+  if (is_key_pressed(VK_DOWN))
+      key_list.push_back(InputKey::DOWN);
+
+  if (is_key_pressed(VK_RETURN))
+      key_list.push_back(InputKey::RETURN);
+
+  Game.Input(key_list);
+  Game.Process(dt);
 }
 
 // fill buffer in this function
@@ -35,6 +65,7 @@ void draw()
 {
   // clear backbuffer
   memset(buffer, 0, SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(uint32_t));
+  Game.Draw(*buffer, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 }
 
