@@ -1,132 +1,298 @@
 #include "Arcanoid.h"
+#include "cstdlib"
+#include "time.h"
 #include "Units.h"
 #include "Engine.h"
 
 Arcanoid::Arcanoid()
 {
+	std::srand(time(NULL));
 }
+//********************************************************************************
 
 Arcanoid::~Arcanoid()
 {
 }
+//********************************************************************************
 
-void Arcanoid::Initialize(uint32_t balls, uint32_t brick)
+void Arcanoid::Initialize(int32_t balls, int32_t brick, float width)
 {
+	Level.Brick = brick;
+	Level.Ball = balls;
+	Level.Width = width;
+
+	//Боковые тригеры
 	{
-		float w = 100.0f;
+		float value = 100.0f;
+
+		auto action = [](UnitBase* self, UnitBase* unit)
+		{
+			if ((unit->Type == UnitType::Ball) || ((unit->Type == UnitType::Pickup)))
+			{
+				auto task = std::make_unique<TaskDeleteUnit>();
+				task->Id = unit->Id;
+				TaskManager::GetInstance()->Send(std::move(task));
+			}
+		};
+		auto down = std::make_shared<UnitTriger>(SCREEN_WIDTH, value, Vector2d(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT + (value * 0.5f)), action);
+		RegisterUnit(std::move(down));
+
+		auto top = std::make_shared<UnitTriger>(SCREEN_WIDTH, value, Vector2d(SCREEN_WIDTH * 0.5f, -(value * 0.5f)));
+		RegisterUnit(std::move(top));
+
+		auto left = std::make_shared<UnitTriger>(value, SCREEN_HEIGHT, Vector2d(-(value * 0.5f), SCREEN_HEIGHT * 0.5f));
+		RegisterUnit(std::move(left));
+
+		auto rigth = std::make_shared<UnitTriger>(value, SCREEN_HEIGHT, Vector2d(SCREEN_WIDTH + (value * 0.5f), SCREEN_HEIGHT * 0.5f));
+		RegisterUnit(std::move(rigth));
+	}
+
+	//Кирпичи
+	{
+		float margin = 2.0f;
+		uint32_t amount = 15;
+		float aspect_ratio = 0.4f;
+
+		float rect_x = (float)SCREEN_WIDTH / (float)amount;
+		float rect_y = rect_x * aspect_ratio;
+
+		float width = rect_x - (margin * 2.0f);
+		float heigth = rect_y - (margin * 2.0f);
+
+		float half_width = rect_x * 0.5f;
+		float half_heigth = rect_y * 0.5f;
+
+		for (uint32_t i = 0; i < Level.Brick; ++i)
+		{
+			//if ((std::rand() % 100) <= 10)
+			//{
+			//	continue;
+			//}
+
+			float x = i % amount;
+			float y = i / amount;
+
+			auto brick = std::make_shared<UnitBrick>(width, heigth, Vector2d(half_width + (x * rect_x), half_heigth + (y * rect_y)));
+			RegisterUnit(brick);
+		}
+	}
+
+	//Каретка
+	{
+		float w = Level.Width;
 		float h = 15.0f;
-		Vector2d position(SCREEN_WIDTH / 2.0f, (SCREEN_HEIGHT - h) - 10.0f);
-		Vector2d speed(0.0f, 0.0f);
+		Vector2d position(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT - h);
 		Color4c color(200, 200, 255);
-		ActorList.push_back(std::make_unique<Actor>(w, h, position, speed, color));
+
+		auto actor = std::make_shared<UnitActor>(w, h, position, color);
+		CurrentActor = actor;
+		RegisterUnit(actor);
 	}
 
+	//шар
 	{
-		float w = 20;
-		float h = 20;
-		Vector2d position(SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
-		Vector2d speed(0.0f, 0.0f);
-		Color4c color(0, 255, 200);
-		for (uint32_t i = 0; i < balls; ++i)
+		for (uint32_t i = 0; i < Level.Ball; ++i)
 		{
-			auto ball = std::make_unique<Ball>(w, h, position, speed, color);
-			ball->Acceleration = {200.0f, -200.0f};
-			UnitList.push_back(std::move(ball));
-		}
-	}
-	{
-		Vector2d speed(0.0f, 0.0f);
-		Color4c color(255, 50, 50);
+			auto ball = std::make_shared<UnitBall>(Vector2d(0.0f, 0.0f));
+			if (CurrentActor->AttachBall(CurrentActor, ball) == false)
+				break;
 
-		float margin = 4.0f;
-		float w = 60;
-		float h = 20;
-
-		float max_w = (w + margin * 2);
-		float max_h = (h + margin * 2);
-
-		int count_x = (SCREEN_WIDTH) / max_w;
-		int count_y = (SCREEN_HEIGHT) / max_h;
-
-		for (uint32_t i = 0; i < brick; ++i)
-		{
-			float x = i % count_x;
-			float y = i / count_x;
-
-			Vector2d position(x * max_w, y * max_h);
-			UnitList.push_back(std::make_unique<Brick>(w, h, position, speed, color));
+			RegisterUnit(ball);
 		}
 	}
 }
+//********************************************************************************
 
-void Arcanoid::Input(std::list<InputKey>& keys)
+void Arcanoid::Input(Keys& keys)
 {
-	std::list<InputKey> key_list = std::move(keys);
-
-	for (auto& key : key_list)
+	for (auto& key : keys)
 	{
-		for (auto& actor : ActorList)
+		if (key.second.State)
 		{
-			actor->Input(key);
+			if (key.second.State != key.second.OldState)
+			{
+				key.second.OnPush = true;
+			}
+			else
+			{
+				key.second.OnPush = false;
+			}
 		}
 	}
+
+	if (keys[InputKey::ESCAPE].OnPush)
+	{
+		schedule_quit_game();
+	}
+
+	if (CurrentActor != nullptr)
+	{
+		CurrentActor->Input(keys);
+	}
 }
+//********************************************************************************
 
 void Arcanoid::Process(float dt)
 {
-	for (auto& unit : ActorList)
+	for (auto unit : Units)
 	{
-		unit->Process(dt);
-
-		for (auto& unit2 : UnitList)
+		if (unit.second->Static == false)
 		{
-			unit->TestCollision(unit2.get());
-		}
-
-		if ((unit->Position.X <= 0.0f) && (unit->Position.X >= SCREEN_WIDTH))
-		{
-			/*unit->Acceleration.X = -unit->Acceleration.X;*/
-			//unit->Position.X =
-		}
-		if ((unit->Position.Y <= 0.0f) && (unit->Position.Y >= SCREEN_HEIGHT))
-		{
-			//unit->Acceleration.Y = -unit->Acceleration.Y;
+			unit.second->Process(dt);
 		}
 	}
 
-	for (auto iter = UnitList.begin(); iter != UnitList.end(); ++iter)
+	for (auto iter = Units.begin(); iter != Units.end(); ++iter)
 	{
-		(*iter)->Process(dt);
-
-		if (((*iter)->Position.X <= 0.0f) || (((*iter)->Position.X + (*iter)->Width) > SCREEN_WIDTH))
+		auto& unit = iter->second;
+		for (auto iter2 = iter; iter2 != Units.end(); ++iter2)
 		{
-			(*iter)->Acceleration.X = -(*iter)->Acceleration.X;
-		}
-
-		if (((*iter)->Position.Y < 0.0f) || (((*iter)->Position.Y + (*iter)->Heigth) > SCREEN_HEIGHT))
-		{
-			(*iter)->Acceleration.Y = -(*iter)->Acceleration.Y;
-		}
-
-		for (auto iter2 = iter; iter2 != UnitList.end(); ++iter2)
-		{
-			if (iter == iter2)
+			auto& unit2 = iter2->second;
+			if ((iter == iter2) ||
+				((unit->Static == true) && (unit2->Static == true)) ||
+				(unit == unit2->Parent) || (unit2 == unit->Parent) ||
+				((unit->Parent != nullptr) && unit->Parent == unit2->Parent))
 				continue;
 
-			(*iter)->TestCollision((*iter2).get());
+			unit->TestCollision(unit2.get());
+		}
+	}
+
+	std::list<std::unique_ptr<Task>> task_list = std::move(TaskManager::GetInstance()->TaskList);
+	for (auto& task : task_list)
+	{
+		ProcessTask(std::move(task));
+	}
+}
+//********************************************************************************
+
+void Arcanoid::DeleteUnit(uint32_t id)
+{
+	Units.erase(id);
+}
+//********************************************************************************
+
+void Arcanoid::RegisterUnit(std::shared_ptr<UnitBase>&& unit)
+{
+	Units.insert(std::make_pair(unit->Id, unit));
+}
+//********************************************************************************
+
+void Arcanoid::ProcessTask(std::unique_ptr<Task> task)
+{
+	switch (task->Type)
+	{
+		case TaskType::DeleteUnit:
+		{
+			auto task_p = static_cast<TaskDeleteUnit*>(task.get());
+			DeleteUnit(task_p->Id);
+			break;
+		}
+		case TaskType::NewGame:
+		{
+			auto task_p = static_cast<TaskNewGame*>(task.get());
+			NewGame(task_p->Win);
+			break;
+		}
+		case TaskType::AttachBall:
+		{
+			auto task_p = static_cast<TaskAttachBall*>(task.get());
+
+			std::shared_ptr<UnitBase> parent_p {nullptr};
+			std::shared_ptr<UnitBase> unit_p {nullptr};
+			for (const auto& unit : Units)
+			{
+				if (unit.second->Id == task_p->UnitId)
+				{
+					unit_p = unit.second;
+				}
+				else if (unit.second->Id == task_p->ParentId)
+				{
+					parent_p = unit.second;
+				}
+
+				if (unit_p && parent_p)
+					break;
+			}
+
+			auto actor = static_cast<UnitActor*>(parent_p.get());
+			if (actor->AttachBall(parent_p, unit_p) == false)
+			{
+				DeleteUnit(task_p->UnitId);
+			}
+			
+			break;
+		}
+		case TaskType::RegisterUnit:
+		{
+			auto task_p = static_cast<TaskRegisterUnit*>(task.get());
+			RegisterUnit(std::move(task_p->Unit));
+			break;
+		}
+		case TaskType::ChangeLive:
+		{
+			auto task_p = static_cast<TaskChangeLive*>(task.get());
+			Level.Live += task_p->Change;
+			if (task_p->Change < 0.0f)
+			{
+				if (Level.Live < 0)
+				{
+					NewGame(false);
+				}
+				else
+				{
+					auto ball = std::make_shared<UnitBall>(Vector2d(0.0f, 0.0f));
+
+					auto task_registre = std::make_unique<TaskRegisterUnit>();
+					task_registre->Unit = ball;
+					TaskManager::GetInstance()->Send(std::move(task_registre));
+
+					auto task_attach = std::make_unique<TaskAttachBall>();
+					task_attach->UnitId = ball->Id;
+					task_attach->ParentId = CurrentActor->Id;
+					TaskManager::GetInstance()->Send(std::move(task_attach));
+				}
+			}
+			break;
 		}
 	}
 }
+//********************************************************************************
 
-void Arcanoid::Draw(uint32_t* buf, uint32_t w, uint32_t h)
+void Arcanoid::NewGame(bool win)
 {
-	for (auto& unit : ActorList)
-	{
-		unit->Draw(buf, w, h);
-	}
+	Clean();
+	TaskManager::GetInstance()->Clean();
 
-	for (auto& unit : UnitList)
+	if (win)
 	{
-		unit->Draw(buf, w, h);
+		Level.Brick += StepBrick;
+		Level.Ball = Level.Ball > 1 ? Level.Ball - 1 : 1;
+		Level.Width = Level.Width > 15.0f ? Level.Width - 15.0f : 15.0f;
+	}
+	else
+	{
+		Level.Live = 0;
+	}
+	Initialize(Level.Ball, Level.Brick, Level.Width);
+}
+//********************************************************************************
+
+void Arcanoid::Draw(uint32_t* buf, int32_t w, int32_t h)
+{
+	for (auto& unit : Units)
+	{
+		if (unit.second->Visible == false)
+			continue;
+
+		unit.second->Draw(buf, w, h);
 	}
 }
+//********************************************************************************
+
+void Arcanoid::Clean()
+{
+	Units.clear();
+}
+//********************************************************************************
+//********************************************************************************

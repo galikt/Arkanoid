@@ -1,58 +1,139 @@
 #pragma once
 
-//#include <windows.h>
-//#include <stdlib.h>
 #include <stdint.h>
+#include <memory>
+#include <list>
+#include <functional>
 #include "Math.h"
 #include "Input.h"
+
+enum class UnitType
+{
+	Base,
+	Ball,
+	Brick,
+	Actor,
+	Triger,
+	Pickup
+};
+//********************************************************************************
+//********************************************************************************
 
 class UnitBase
 {
 public:
-	UnitBase(float width, float heigth, Vector2d& position, Vector2d& speed, Color4c& color);
+	UnitBase(UnitType type, float width, float heigth, Vector2d position);
 	~UnitBase() = default;
 
 	virtual void Process(float dt);
-	virtual void Draw(uint32_t* buf, uint32_t w, uint32_t h);
+	//virtual void PostProcess();
+	virtual void Draw(uint32_t* buf, int32_t width, int32_t heigth);
+	virtual void Attach(std::shared_ptr<UnitBase> parent, std::shared_ptr<UnitBase> unit);
+	virtual void Detach(std::shared_ptr<UnitBase> unit);
 	virtual void TestCollision(UnitBase* unit);
+	virtual void OnCollision(UnitBase* unit, Vector2d& offset);
 
+	UnitType Type{ UnitType::Base };
+	uint32_t Id;
 	float Width;
 	float Heigth;
+	Color4c Color{ 255,255,255 };
 	Vector2d Position;
-	Vector2d Speed;
-	Vector2d Acceleration{0.0, 0.0};
-	Color4c Color;
-};
+	Vector2d RelativePosition{ 0.0f, 0.0f };
+	Vector2d Speed{ 0.0f, 0.0f };
+	Vector2d Acceleration{ 0.0, 0.0 };
 
-class Ball : public UnitBase
+	bool Static{ true };
+	bool Visible{ true };
+
+	std::shared_ptr<UnitBase> Parent { nullptr };
+	std::list<std::shared_ptr<UnitBase>> ChildList;
+};
+//********************************************************************************
+//********************************************************************************
+
+class UnitBall : public UnitBase
 {
 public:
-	Ball(float width, float heigth, Vector2d& position, Vector2d& speed, Color4c& color);
-	~Ball() = default;
+	UnitBall(Vector2d position, float width = 15.0f, float heigth = 15.0f, Color4c color = Color4c(0, 255, 200));
+	~UnitBall();
 
-	//virtual void Process(float dt) override;
-	//virtual void Draw(uint32_t* buf) override;
+	virtual void Draw(uint32_t* buf, int32_t width, int32_t heigth) override;
+	virtual void TestCollision(UnitBase* unit) override;
+	virtual void OnCollision(UnitBase* unit, Vector2d& offset) override;
+	static int32_t Count;
 };
+//********************************************************************************
+//********************************************************************************
 
-class Brick : public UnitBase
+class UnitBrick : public UnitBase
 {
 public:
-	Brick(float width, float heigth, Vector2d& position, Vector2d& speed, Color4c& color);
-	~Brick() = default;
+	UnitBrick(float width, float heigth, Vector2d position);
+	~UnitBrick();
 
-	//virtual void Process(float dt) override;
-	//virtual void Draw(uint32_t* buf, uint32_t w, uint32_t h) override;
+	virtual void OnCollision(UnitBase* unit, Vector2d& offset) override;
+	void UpdateColor();
+
+	bool Pickup{ false };
+	int32_t Live{ 0 };
+	static int32_t MaxLive;
+	static uint32_t BaseColor;
+	static int32_t Count;
 };
+//********************************************************************************
+//********************************************************************************
 
-class Actor : public UnitBase, public InputBase
+class UnitActor : public UnitBase, public InputBase
 {
 public:
-	Actor(float width, float heigth, Vector2d& position, Vector2d& speed, Color4c& color);
-	~Actor() = default;
+	UnitActor(float width, float heigth, Vector2d position, Color4c& color);
+	~UnitActor() = default;
 
-	virtual void Input(InputKey& key) override;
-	virtual void Process(float dt) override;
+	virtual void Input(Keys& keys) override;
+	virtual void OnCollision(UnitBase* unit, Vector2d& offset) override;
+	bool AttachBall(std::shared_ptr<UnitBase> parent, std::shared_ptr<UnitBase> unit);
 
-	float InputAcceleration{ 1000 };
-	//virtual void Draw(uint32_t* buf, uint32_t w, uint32_t h) override;
+	float BallSpeed{ -300.0f };
+	float InputSpeed{ 400.0f };
+	bool Grab{ false };
 };
+//********************************************************************************
+//********************************************************************************
+
+class UnitTriger : public UnitBase
+{
+public:
+	UnitTriger(float width, float heigth, Vector2d position, std::function<void(UnitBase*, UnitBase*)> action = nullptr);
+	~UnitTriger() = default;
+
+	virtual void OnCollision(UnitBase* unit, Vector2d& offset) override;
+
+	std::function<void(UnitBase* self, UnitBase* unit)> Action{ nullptr };
+};
+//********************************************************************************
+//********************************************************************************
+
+class UnitPickup : public UnitBase
+{
+public:
+	UnitPickup(Vector2d& position);
+	~UnitPickup() = default;
+
+	static float Size;
+	float BonusWidth{ 0.0f };
+	float BonusSpeed{ 0.0f };
+	bool BonusBall{ false };
+	int32_t BonusLive{ 0 };
+private:
+	enum class TypeBounus
+	{
+		Width = 0,
+		Speed,
+		Ball,
+		Live,
+		Count
+	};
+};
+//********************************************************************************
+//********************************************************************************

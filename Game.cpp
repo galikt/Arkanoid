@@ -1,6 +1,6 @@
 #include "Engine.h"
 #include <stdlib.h>
-#include <list>
+#include <map>
 #include "Arcanoid.h"
 //#include "Input.h"
 
@@ -22,40 +22,28 @@ static Arcanoid Game;
 // initialize game data in this function
 void initialize()
 {
-    Game.Initialize(1, 150);
+    Game.Initialize();
 }
 
 // this function is called to update game data,
 // dt - time elapsed since the previous update (in seconds)
 void act(float dt)
 {
-  static std::list<InputKey> key_list;
+    static Keys key_map = { std::pair(InputKey::ESCAPE, KeyState(VK_ESCAPE)),
+                            std::pair(InputKey::LEFT, KeyState(VK_LEFT)),
+                            std::pair(InputKey::RIGHT, KeyState(VK_RIGHT)),
+                            std::pair(InputKey::UP, KeyState(VK_UP)),
+                            std::pair(InputKey::DOWN, KeyState(VK_DOWN)),
+                            std::pair(InputKey::SPACE, KeyState(VK_SPACE)),
+                            std::pair(InputKey::RETURN, KeyState(VK_RETURN))};
 
-  if (is_key_pressed(VK_ESCAPE))
-  {
-    key_list.push_back(InputKey::ESCAPE);
-    schedule_quit_game();
-  }
+    for (auto& key : key_map)
+    {
+        key.second.OldState = key.second.State;
+        key.second.State = is_key_pressed(key.second.OsKey);
+    }
 
-  if (is_key_pressed(VK_SPACE))
-      key_list.push_back(InputKey::SPACE);
-
-  if (is_key_pressed(VK_LEFT))
-      key_list.push_back(InputKey::LEFT);
-
-  if (is_key_pressed(VK_UP))
-      key_list.push_back(InputKey::UP);
-
-  if (is_key_pressed(VK_RIGHT))
-      key_list.push_back(InputKey::RIGHT);
-
-  if (is_key_pressed(VK_DOWN))
-      key_list.push_back(InputKey::DOWN);
-
-  if (is_key_pressed(VK_RETURN))
-      key_list.push_back(InputKey::RETURN);
-
-  Game.Input(key_list);
+  Game.Input(key_map);
   Game.Process(dt);
 }
 
